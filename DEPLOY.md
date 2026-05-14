@@ -41,7 +41,7 @@ https://your-public-url.com/api/payos/webhook
 
 ## 4. Suggested hosting: Render
 
-For a stable public URL, use Render with the included `Dockerfile` and `render.yaml`.
+For a no-cost public test URL, use Render with the included `Dockerfile` and `render.yaml`.
 
 1. Push this project to a GitHub repository.
 2. In Render, create a new Blueprint or Web Service from that repository.
@@ -60,7 +60,9 @@ PAYOS_CHECKSUM_KEY=...
 https://your-render-service.onrender.com/api/payos/webhook
 ```
 
-The included Render disk mounts `/app/data`, so local JSON and Excel exports survive restarts.
+The included `render.yaml` uses Render's free web service tier so you can test without monthly compute cost.
+
+Important: the free tier does not include a persistent disk. Registration data and Excel exports can be lost after redeploys/restarts. For a real event, upgrade to a paid instance with a persistent disk or move data to Supabase/Postgres.
 
 For any Node host, the build/run commands are:
 

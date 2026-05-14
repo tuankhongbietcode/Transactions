@@ -2,13 +2,9 @@ services:
   - type: web
     name: event-payment-registration
     env: docker
-    plan: starter
+    plan: free
     autoDeploy: true
     healthCheckPath: /api/health
-    disk:
-      name: event-payment-data
-      mountPath: /app/data
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 8080
