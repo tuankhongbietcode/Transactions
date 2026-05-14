@@ -148,9 +148,13 @@ function emailApiHeaders() {
 }
 
 async function sendTicketEmailViaApi(registration, content) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
   const response = await fetch(process.env.EMAIL_API_URL, {
     method: "POST",
     headers: emailApiHeaders(),
+    signal: controller.signal,
     body: JSON.stringify({
       from: mailFrom(),
       to: {
@@ -169,7 +173,7 @@ async function sendTicketEmailViaApi(registration, content) {
         checkInUrl: content.checkInUrl,
       },
     }),
-  });
+  }).finally(() => clearTimeout(timeout));
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -192,6 +196,9 @@ async function sendTicketEmail(registration) {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: String(process.env.SMTP_SECURE).toLowerCase() === "true",
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -213,9 +220,14 @@ async function sendTicketEmailIfNeeded(registration) {
   if (registration.status !== "confirmed" || registration.ticketEmailSentAt) return registration;
   if (!configuredEmail()) return registration;
 
-  await sendTicketEmail(registration);
-  registration.ticketEmailSentAt = new Date().toISOString();
-  return saveRegistration(registration);
+  try {
+    await sendTicketEmail(registration);
+    registration.ticketEmailSentAt = new Date().toISOString();
+    return saveRegistration(registration);
+  } catch (error) {
+    console.error(`Ticket email failed for ${registration.id}:`, error);
+    return registration;
+  }
 }
 
 async function writeRegistrationsExcel(store) {
@@ -662,6 +674,36 @@ app.get("/api/export/registrations.xlsx", async (_req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Khong the tao file Excel." });
+  }
+});
+
+app.post("/api/email/test", async (req, res) => {
+  try {
+    if (!configuredEmail()) {
+      return res.status(400).json({ message: "Email is not configured." });
+    }
+
+    const email = req.body?.email || process.env.SMTP_USER || process.env.EMAIL_API_FROM;
+    if (!email) return res.status(400).json({ message: "Missing test email." });
+
+    await sendTicketEmail({
+      id: "EVT-TEST-EMAIL",
+      orderCode: 0,
+      planId: "standard",
+      planName: "Standard",
+      amount: 10000,
+      status: "confirmed",
+      fullName: "Email Test",
+      email,
+      phone: "0000000000",
+      company: "Test",
+      paidAt: new Date().toISOString(),
+    });
+
+    res.json({ ok: true, provider: configuredEmailApi() ? "api" : "smtp", to: email });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || "Email test failed." });
   }
 });
 
