@@ -52,6 +52,8 @@ PUBLIC_BASE_URL=https://your-render-service.onrender.com
 PAYOS_CLIENT_ID=...
 PAYOS_API_KEY=...
 PAYOS_CHECKSUM_KEY=...
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 4. Set the payOS webhook URL:
@@ -62,7 +64,16 @@ https://your-render-service.onrender.com/api/payos/webhook
 
 The included `render.yaml` uses Render's free web service tier so you can test without monthly compute cost.
 
-Important: the free tier does not include a persistent disk. Registration data and Excel exports can be lost after redeploys/restarts. For a real event, upgrade to a paid instance with a persistent disk or move data to Supabase/Postgres.
+Important: the free tier does not include a persistent disk. Use Supabase Free for durable registration storage.
+
+## 5. Supabase Free setup
+
+1. Create a Supabase project.
+2. Open SQL Editor and run `supabase-schema.sql`.
+3. Copy the project URL into `SUPABASE_URL`.
+4. Copy the server-side `service_role` key into `SUPABASE_SERVICE_ROLE_KEY`.
+
+Do not put the service role key in frontend code. It belongs only in Render environment variables.
 
 For any Node host, the build/run commands are:
 
@@ -74,7 +85,7 @@ npm run start
 
 Use Node 22 or newer. The app listens on `PORT` if the host provides it.
 
-## 5. Excel export
+## 6. Excel export
 
 The app automatically keeps an Excel file updated when registrations, payments, or check-ins change.
 
@@ -84,6 +95,6 @@ Download it from:
 https://your-public-url.com/api/export/registrations.xlsx
 ```
 
-## 6. Production note
+## 7. Production note
 
-The current prototype stores registrations in `data/registrations.json`. That is fine for trial runs and demos. For a serious event, move the store to Supabase, Postgres, MySQL, or another managed database so data is durable across deploys and multiple server instances.
+When `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set, registrations are stored in Supabase. Without those variables, the app falls back to `data/registrations.json`, which is useful for local demos but not durable on free hosting.

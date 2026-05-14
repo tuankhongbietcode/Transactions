@@ -6,6 +6,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import ExcelJS from "exceljs";
 import express from "express";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -20,6 +21,16 @@ const excelFile = path.join(dataDir, "registrations.xlsx");
 const app = express();
 const port = Number(process.env.PORT || 8080);
 let storeQueue = Promise.resolve();
+const supabase =
+  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
 
 const plans = {
   free: { id: "free", name: "Free", amount: 0 },
@@ -165,6 +176,74 @@ async function writeRegistrationsExcel(store) {
   await workbook.xlsx.writeFile(excelFile);
 }
 
+function toDbRegistration(registration) {
+  return {
+    id: registration.id,
+    order_code: registration.orderCode,
+    plan_id: registration.planId,
+    plan_name: registration.planName,
+    amount: registration.amount,
+    status: registration.status,
+    full_name: registration.fullName,
+    email: registration.email,
+    phone: registration.phone,
+    company: registration.company,
+    payment_provider: registration.paymentProvider,
+    payment_url: registration.paymentUrl,
+    payment_qr: registration.paymentQr,
+    payment_link_id: registration.paymentLinkId,
+    payos_status: registration.payosStatus,
+    amount_paid: registration.amountPaid,
+    amount_remaining: registration.amountRemaining,
+    payment_reference: registration.paymentReference,
+    transactions: registration.transactions,
+    created_at: registration.createdAt,
+    paid_at: registration.paidAt,
+    checked_in_at: registration.checkedInAt,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDbRegistration(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    orderCode: row.order_code,
+    planId: row.plan_id,
+    planName: row.plan_name,
+    amount: row.amount,
+    status: row.status,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone,
+    company: row.company || "",
+    paymentProvider: row.payment_provider,
+    paymentUrl: row.payment_url,
+    paymentQr: row.payment_qr,
+    paymentLinkId: row.payment_link_id,
+    payosStatus: row.payos_status,
+    amountPaid: row.amount_paid,
+    amountRemaining: row.amount_remaining,
+    paymentReference: row.payment_reference,
+    transactions: row.transactions,
+    createdAt: row.created_at,
+    paidAt: row.paid_at,
+    checkedInAt: row.checked_in_at,
+  };
+}
+
+async function readAllRegistrations() {
+  if (!supabase) return readStore();
+
+  const { data, error } = await supabase
+    .from("registrations")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return { registrations: data.map(fromDbRegistration) };
+}
+
 async function updateStore(updater) {
   const task = storeQueue.then(async () => {
     const store = await readStore();
@@ -178,6 +257,19 @@ async function updateStore(updater) {
 }
 
 async function saveRegistration(registration) {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("registrations")
+      .upsert(toDbRegistration(registration), { onConflict: "id" })
+      .select()
+      .single();
+
+    if (error) throw error;
+    const savedRegistration = fromDbRegistration(data);
+    await writeRegistrationsExcel(await readAllRegistrations());
+    return savedRegistration;
+  }
+
   return updateStore((store) => {
     const index = store.registrations.findIndex((item) => item.id === registration.id);
     if (index >= 0) {
@@ -190,11 +282,27 @@ async function saveRegistration(registration) {
 }
 
 async function findRegistrationById(id) {
+  if (supabase) {
+    const { data, error } = await supabase.from("registrations").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return fromDbRegistration(data);
+  }
+
   const store = await readStore();
   return store.registrations.find((item) => item.id === id);
 }
 
 async function findRegistrationByOrderCode(orderCode) {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("registrations")
+      .select("*")
+      .eq("order_code", Number(orderCode))
+      .maybeSingle();
+    if (error) throw error;
+    return fromDbRegistration(data);
+  }
+
   const store = await readStore();
   return store.registrations.find((item) => String(item.orderCode) === String(orderCode));
 }
@@ -395,12 +503,12 @@ function cleanCheckInRegistration(registration) {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, payosConfigured: configuredPayOS() });
+  res.json({ ok: true, payosConfigured: configuredPayOS(), storage: supabase ? "supabase" : "file" });
 });
 
 app.get("/api/export/registrations.xlsx", async (_req, res) => {
   try {
-    const store = await readStore();
+    const store = await readAllRegistrations();
     await writeRegistrationsExcel(store);
     res.download(excelFile, "event-registrations.xlsx");
   } catch (error) {

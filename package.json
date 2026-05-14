@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
+    "@supabase/supabase-js": "^2.49.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "exceljs": "^4.4.0",
