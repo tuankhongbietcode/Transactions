@@ -434,23 +434,39 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-function extractRegistrationId(value: string) {
+function extractTicketLookup(value: string): { type: "id" | "orderCode"; value: string } | null {
   const trimmed = value.trim();
-  if (!trimmed) return "";
+  if (!trimmed) return null;
 
   try {
     const parsed = JSON.parse(trimmed);
-    if (parsed.registrationId) return String(parsed.registrationId);
+    if (parsed.registrationId) return { type: "id", value: String(parsed.registrationId) };
+    if (parsed.orderCode) return { type: "orderCode", value: String(parsed.orderCode) };
   } catch {
     // Plain code or URL is expected for staff check-in.
   }
 
   try {
     const parsedUrl = new URL(trimmed);
-    return parsedUrl.searchParams.get("id") || parsedUrl.searchParams.get("order") || trimmed;
+    const id = parsedUrl.searchParams.get("id") || parsedUrl.searchParams.get("order");
+    if (id) return { type: "id", value: id };
+
+    const orderCode = parsedUrl.searchParams.get("orderCode");
+    if (orderCode) return { type: "orderCode", value: orderCode };
   } catch {
-    return trimmed;
+    // Continue with text extraction below.
   }
+
+  const registrationMatch = trimmed.match(/EVT-[A-Z]{3}-\d{6}-[A-Z0-9]{6}/i);
+  if (registrationMatch) return { type: "id", value: registrationMatch[0].toUpperCase() };
+
+  const compactOrderMatch = trimmed.match(/\bEVT\s*([0-9]{8,12})\b/i);
+  if (compactOrderMatch) return { type: "orderCode", value: compactOrderMatch[1] };
+
+  const plainOrderMatch = trimmed.match(/\b[0-9]{8,12}\b/);
+  if (plainOrderMatch) return { type: "orderCode", value: plainOrderMatch[0] };
+
+  return { type: "id", value: trimmed };
 }
 
 function CheckInApp() {
@@ -468,8 +484,8 @@ function CheckInApp() {
   }, []);
 
   async function lookupTicket(code = ticketCode) {
-    const id = extractRegistrationId(code);
-    if (!id) {
+    const lookup = extractTicketLookup(code);
+    if (!lookup) {
       setMessage("Nhập mã vé hoặc scan QR trước.");
       return;
     }
@@ -478,7 +494,11 @@ function CheckInApp() {
     setMessage("");
 
     try {
-      const body = await parseApiResponse(await fetch(`/api/checkin/${encodeURIComponent(id)}`));
+      const endpoint =
+        lookup.type === "orderCode"
+          ? `/api/checkin/by-order/${encodeURIComponent(lookup.value)}`
+          : `/api/checkin/${encodeURIComponent(lookup.value)}`;
+      const body = await parseApiResponse(await fetch(endpoint));
       setRegistration(body.registration);
       setTicketCode(body.registration.id);
     } catch (error) {

@@ -612,6 +612,18 @@ app.get("/api/checkin/:id", async (req, res) => {
   }
 });
 
+app.get("/api/checkin/by-order/:orderCode", async (req, res) => {
+  try {
+    let registration = await findRegistrationByOrderCode(req.params.orderCode);
+    if (!registration) return res.status(404).json({ message: "Khong tim thay ve theo ma don nay." });
+    registration = await refreshPaymentStatus(registration);
+    res.json({ registration: cleanCheckInRegistration(registration) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || "Khong the kiem tra ve." });
+  }
+});
+
 app.post("/api/checkin/:id/confirm", async (req, res) => {
   try {
     const registration = await findRegistrationById(req.params.id);
