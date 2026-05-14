@@ -54,6 +54,12 @@ PAYOS_API_KEY=...
 PAYOS_CHECKSUM_KEY=...
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
+SMTP_HOST=...
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=...
+SMTP_PASS=...
+MAIL_FROM=...
 ```
 
 4. Set the payOS webhook URL:
@@ -75,6 +81,28 @@ Important: the free tier does not include a persistent disk. Use Supabase Free f
 
 Do not put the service role key in frontend code. It belongs only in Render environment variables.
 
+If the `registrations` table already exists, still run the latest `supabase-schema.sql`; it includes safe `add column if not exists` statements for new fields such as `ticket_email_sent_at`.
+
+## 6. Ticket email setup
+
+Use an SMTP provider such as Gmail App Password, Zoho, Brevo, SendGrid SMTP, or your company mail server.
+
+Required Render environment variables:
+
+```env
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+MAIL_FROM="Event Team <tickets@example.com>"
+```
+
+When configured, the app sends the ticket email automatically:
+
+- Free: immediately after registration.
+- Standard/Mastery: after payOS confirms payment.
+
 For any Node host, the build/run commands are:
 
 ```bash
@@ -85,7 +113,7 @@ npm run start
 
 Use Node 22 or newer. The app listens on `PORT` if the host provides it.
 
-## 6. Excel export
+## 7. Excel export
 
 The app automatically keeps an Excel file updated when registrations, payments, or check-ins change.
 
@@ -95,6 +123,6 @@ Download it from:
 https://your-public-url.com/api/export/registrations.xlsx
 ```
 
-## 7. Production note
+## 8. Production note
 
 When `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set, registrations are stored in Supabase. Without those variables, the app falls back to `data/registrations.json`, which is useful for local demos but not durable on free hosting.

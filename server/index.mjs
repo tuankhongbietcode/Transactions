@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import ExcelJS from "exceljs";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -75,6 +76,83 @@ function toExcelDate(value) {
   return value ? new Date(value) : null;
 }
 
+function configuredEmail() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+function appBaseUrl() {
+  return (process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`).replace(/\/$/, "");
+}
+
+function mailFrom() {
+  return process.env.MAIL_FROM || process.env.SMTP_USER;
+}
+
+async function sendTicketEmail(registration) {
+  if (!configuredEmail()) return false;
+
+  const baseUrl = appBaseUrl();
+  const ticketUrl = `${baseUrl}/?order=${encodeURIComponent(registration.id)}`;
+  const checkInUrl = `${baseUrl}/checkin?id=${encodeURIComponent(registration.id)}`;
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: String(process.env.SMTP_SECURE).toLowerCase() === "true",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: mailFrom(),
+    to: registration.email,
+    subject: `Ve su kien ${registration.planName} - ${registration.id}`,
+    text: [
+      `Xin chao ${registration.fullName},`,
+      "",
+      "Ve su kien cua ban da duoc xac nhan.",
+      `Ma ve: ${registration.id}`,
+      `Hang ve: ${registration.planName}`,
+      `So dien thoai: ${registration.phone}`,
+      "",
+      `Mo QR ve tai: ${ticketUrl}`,
+      `Link check-in cho staff: ${checkInUrl}`,
+      "",
+      "Vui long luu email nay de xuat trinh khi check-in.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#182230">
+        <h2>Ve su kien da duoc xac nhan</h2>
+        <p>Xin chao <strong>${registration.fullName}</strong>,</p>
+        <p>Ve cua ban da san sang. Vui long luu email nay de mo lai QR khi check-in.</p>
+        <table style="border-collapse:collapse;margin:16px 0">
+          <tr><td style="padding:6px 12px;border:1px solid #ddd">Ma ve</td><td style="padding:6px 12px;border:1px solid #ddd"><strong>${registration.id}</strong></td></tr>
+          <tr><td style="padding:6px 12px;border:1px solid #ddd">Hang ve</td><td style="padding:6px 12px;border:1px solid #ddd">${registration.planName}</td></tr>
+          <tr><td style="padding:6px 12px;border:1px solid #ddd">Dien thoai</td><td style="padding:6px 12px;border:1px solid #ddd">${registration.phone}</td></tr>
+        </table>
+        <p>
+          <a href="${ticketUrl}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 16px;border-radius:8px;font-weight:bold">
+            Mo QR ve
+          </a>
+        </p>
+        <p style="color:#667085;font-size:13px">Neu nut khong mo duoc, copy link nay: ${ticketUrl}</p>
+      </div>
+    `,
+  });
+
+  return true;
+}
+
+async function sendTicketEmailIfNeeded(registration) {
+  if (registration.status !== "confirmed" || registration.ticketEmailSentAt) return registration;
+  if (!configuredEmail()) return registration;
+
+  await sendTicketEmail(registration);
+  registration.ticketEmailSentAt = new Date().toISOString();
+  return saveRegistration(registration);
+}
+
 async function writeRegistrationsExcel(store) {
   await ensureStore();
   const workbook = new ExcelJS.Workbook();
@@ -99,6 +177,7 @@ async function writeRegistrationsExcel(store) {
     { header: "Ngày đăng ký", key: "createdAt", width: 22 },
     { header: "Ngày thanh toán", key: "paidAt", width: 22 },
     { header: "Ngày check-in", key: "checkedInAt", width: 22 },
+    { header: "Ngày gửi email vé", key: "ticketEmailSentAt", width: 22 },
     { header: "Link thanh toán", key: "paymentUrl", width: 42 },
   ];
 
@@ -121,6 +200,7 @@ async function writeRegistrationsExcel(store) {
       createdAt: toExcelDate(registration.createdAt),
       paidAt: toExcelDate(registration.paidAt),
       checkedInAt: toExcelDate(registration.checkedInAt),
+      ticketEmailSentAt: toExcelDate(registration.ticketEmailSentAt),
       paymentUrl: registration.paymentUrl,
     });
   }
@@ -138,7 +218,7 @@ async function writeRegistrationsExcel(store) {
 
   sheet.autoFilter = {
     from: "A1",
-    to: "N1",
+    to: "O1",
   };
 
   sheet.eachRow((row, rowNumber) => {
@@ -200,6 +280,7 @@ function toDbRegistration(registration) {
     created_at: registration.createdAt,
     paid_at: registration.paidAt,
     checked_in_at: registration.checkedInAt,
+    ticket_email_sent_at: registration.ticketEmailSentAt,
     updated_at: new Date().toISOString(),
   };
 }
@@ -229,6 +310,7 @@ function fromDbRegistration(row) {
     createdAt: row.created_at,
     paidAt: row.paid_at,
     checkedInAt: row.checked_in_at,
+    ticketEmailSentAt: row.ticket_email_sent_at,
   };
 }
 
@@ -391,8 +473,8 @@ async function refreshPaymentStatus(registration) {
     registration.paidAt = new Date().toISOString();
   }
 
-  await saveRegistration(registration);
-  return registration;
+  const savedRegistration = await saveRegistration(registration);
+  return sendTicketEmailIfNeeded(savedRegistration);
 }
 
 function publicBaseUrl(req) {
@@ -482,6 +564,7 @@ function cleanRegistration(registration) {
     amountPaid: registration.amountPaid,
     amountRemaining: registration.amountRemaining,
     checkedInAt: registration.checkedInAt,
+    ticketEmailSentAt: registration.ticketEmailSentAt,
   };
 }
 
@@ -560,8 +643,9 @@ app.post("/api/registrations", async (req, res) => {
       };
     }
 
-    await saveRegistration(registration);
-    res.status(201).json({ registration: cleanRegistration(registration) });
+    const savedRegistration = await saveRegistration(registration);
+    const emailedRegistration = await sendTicketEmailIfNeeded(savedRegistration);
+    res.status(201).json({ registration: cleanRegistration(emailedRegistration) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: error.message || "Không thể tạo đăng ký." });
@@ -596,8 +680,9 @@ app.post("/api/mock/pay/:id", async (req, res) => {
 
   registration.status = "confirmed";
   registration.paidAt = new Date().toISOString();
-  await saveRegistration(registration);
-  res.json({ registration: cleanRegistration(registration) });
+  const savedRegistration = await saveRegistration(registration);
+  const emailedRegistration = await sendTicketEmailIfNeeded(savedRegistration);
+  res.json({ registration: cleanRegistration(emailedRegistration) });
 });
 
 app.get("/api/checkin/:id", async (req, res) => {
@@ -666,7 +751,8 @@ app.post("/api/payos/webhook", async (req, res) => {
       registration.status = "confirmed";
       registration.paidAt = new Date().toISOString();
       registration.paymentReference = data.reference;
-      await saveRegistration(registration);
+      const savedRegistration = await saveRegistration(registration);
+      await sendTicketEmailIfNeeded(savedRegistration);
     }
 
     res.json({ ok: true });

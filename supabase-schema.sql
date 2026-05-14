@@ -21,8 +21,12 @@ create table if not exists public.registrations (
   created_at timestamptz not null,
   paid_at timestamptz,
   checked_in_at timestamptz,
+  ticket_email_sent_at timestamptz,
   updated_at timestamptz not null default now()
 );
+
+alter table public.registrations
+  add column if not exists ticket_email_sent_at timestamptz;
 
 create index if not exists registrations_created_at_idx
   on public.registrations (created_at desc);

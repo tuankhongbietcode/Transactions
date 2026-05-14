@@ -35,6 +35,7 @@ function toDbRegistration(registration) {
     created_at: registration.createdAt,
     paid_at: registration.paidAt,
     checked_in_at: registration.checkedInAt,
+    ticket_email_sent_at: registration.ticketEmailSentAt,
     updated_at: new Date().toISOString(),
   };
 }
