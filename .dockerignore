@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+.env
+.env.local
+cloudflared.exe
+cloudflared.log
+tunnel.log
+event-registrations-*.xlsx
+npm-debug.log*
