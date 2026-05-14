@@ -90,6 +90,10 @@ If the `registrations` table already exists, still run the latest `supabase-sche
 
 ## 6. Ticket email setup
 
+Email is optional. Leave all email variables empty to keep registration, payment, QR, check-in, Supabase, and Excel export working without email delivery.
+
+Recommended for demos: disable email until the business provides a verified sender or transactional email provider.
+
 ### Option A: Generic Email API
 
 If the business already has an email API, configure:
