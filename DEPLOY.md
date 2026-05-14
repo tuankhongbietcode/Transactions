@@ -60,6 +60,11 @@ SMTP_SECURE=false
 SMTP_USER=...
 SMTP_PASS=...
 MAIL_FROM=...
+EMAIL_API_URL=...
+EMAIL_API_KEY=...
+EMAIL_API_AUTH_HEADER=Authorization
+EMAIL_API_AUTH_SCHEME=Bearer
+EMAIL_API_FROM=...
 ```
 
 4. Set the payOS webhook URL:
@@ -84,6 +89,51 @@ Do not put the service role key in frontend code. It belongs only in Render envi
 If the `registrations` table already exists, still run the latest `supabase-schema.sql`; it includes safe `add column if not exists` statements for new fields such as `ticket_email_sent_at`.
 
 ## 6. Ticket email setup
+
+### Option A: Generic Email API
+
+If the business already has an email API, configure:
+
+```env
+EMAIL_API_URL=https://email-api.example.com/send
+EMAIL_API_KEY=...
+EMAIL_API_AUTH_HEADER=Authorization
+EMAIL_API_AUTH_SCHEME=Bearer
+EMAIL_API_FROM=Event Team <tickets@example.com>
+```
+
+The app sends a `POST` request with JSON:
+
+```json
+{
+  "from": "Event Team <tickets@example.com>",
+  "to": {
+    "email": "customer@example.com",
+    "name": "Customer Name"
+  },
+  "subject": "Ve su kien Standard - EVT-STA-...",
+  "text": "Plain text ticket email",
+  "html": "<div>HTML ticket email</div>",
+  "metadata": {
+    "registrationId": "EVT-STA-...",
+    "orderCode": 1234567890,
+    "planId": "standard",
+    "planName": "Standard",
+    "ticketUrl": "https://your-app.com/?order=EVT-STA-...",
+    "checkInUrl": "https://your-app.com/checkin?id=EVT-STA-..."
+  }
+}
+```
+
+Authentication header defaults to:
+
+```text
+Authorization: Bearer YOUR_EMAIL_API_KEY
+```
+
+Set `EMAIL_API_AUTH_HEADER` and `EMAIL_API_AUTH_SCHEME` if your API expects a different header, such as `x-api-key`.
+
+### Option B: SMTP
 
 Use an SMTP provider such as Gmail App Password, Zoho, Brevo, SendGrid SMTP, or your company mail server.
 

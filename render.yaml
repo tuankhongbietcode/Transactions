@@ -20,6 +20,16 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: EMAIL_API_URL
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_API_AUTH_HEADER
+        value: Authorization
+      - key: EMAIL_API_AUTH_SCHEME
+        value: Bearer
+      - key: EMAIL_API_FROM
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

@@ -77,7 +77,14 @@ function toExcelDate(value) {
 }
 
 function configuredEmail() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return Boolean(
+    (process.env.EMAIL_API_URL && process.env.EMAIL_API_KEY) ||
+      (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+  );
+}
+
+function configuredEmailApi() {
+  return Boolean(process.env.EMAIL_API_URL && process.env.EMAIL_API_KEY);
 }
 
 function appBaseUrl() {
@@ -85,15 +92,102 @@ function appBaseUrl() {
 }
 
 function mailFrom() {
-  return process.env.MAIL_FROM || process.env.SMTP_USER;
+  return process.env.EMAIL_API_FROM || process.env.MAIL_FROM || process.env.SMTP_USER;
+}
+
+function ticketEmailContent(registration) {
+  const baseUrl = appBaseUrl();
+  const ticketUrl = `${baseUrl}/?order=${encodeURIComponent(registration.id)}`;
+  const checkInUrl = `${baseUrl}/checkin?id=${encodeURIComponent(registration.id)}`;
+  const subject = `Ve su kien ${registration.planName} - ${registration.id}`;
+  const text = [
+    `Xin chao ${registration.fullName},`,
+    "",
+    "Ve su kien cua ban da duoc xac nhan.",
+    `Ma ve: ${registration.id}`,
+    `Hang ve: ${registration.planName}`,
+    `So dien thoai: ${registration.phone}`,
+    "",
+    `Mo QR ve tai: ${ticketUrl}`,
+    `Link check-in cho staff: ${checkInUrl}`,
+    "",
+    "Vui long luu email nay de xuat trinh khi check-in.",
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#182230">
+      <h2>Ve su kien da duoc xac nhan</h2>
+      <p>Xin chao <strong>${registration.fullName}</strong>,</p>
+      <p>Ve cua ban da san sang. Vui long luu email nay de mo lai QR khi check-in.</p>
+      <table style="border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:6px 12px;border:1px solid #ddd">Ma ve</td><td style="padding:6px 12px;border:1px solid #ddd"><strong>${registration.id}</strong></td></tr>
+        <tr><td style="padding:6px 12px;border:1px solid #ddd">Hang ve</td><td style="padding:6px 12px;border:1px solid #ddd">${registration.planName}</td></tr>
+        <tr><td style="padding:6px 12px;border:1px solid #ddd">Dien thoai</td><td style="padding:6px 12px;border:1px solid #ddd">${registration.phone}</td></tr>
+      </table>
+      <p>
+        <a href="${ticketUrl}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 16px;border-radius:8px;font-weight:bold">
+          Mo QR ve
+        </a>
+      </p>
+      <p style="color:#667085;font-size:13px">Neu nut khong mo duoc, copy link nay: ${ticketUrl}</p>
+    </div>
+  `;
+
+  return { subject, text, html, ticketUrl, checkInUrl };
+}
+
+function emailApiHeaders() {
+  const headerName = process.env.EMAIL_API_AUTH_HEADER || "Authorization";
+  const scheme = process.env.EMAIL_API_AUTH_SCHEME || "Bearer";
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  headers[headerName] = scheme ? `${scheme} ${process.env.EMAIL_API_KEY}` : process.env.EMAIL_API_KEY;
+  return headers;
+}
+
+async function sendTicketEmailViaApi(registration, content) {
+  const response = await fetch(process.env.EMAIL_API_URL, {
+    method: "POST",
+    headers: emailApiHeaders(),
+    body: JSON.stringify({
+      from: mailFrom(),
+      to: {
+        email: registration.email,
+        name: registration.fullName,
+      },
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+      metadata: {
+        registrationId: registration.id,
+        orderCode: registration.orderCode,
+        planId: registration.planId,
+        planName: registration.planName,
+        ticketUrl: content.ticketUrl,
+        checkInUrl: content.checkInUrl,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Email API failed: ${response.status} ${errorText}`);
+  }
+
+  return true;
 }
 
 async function sendTicketEmail(registration) {
   if (!configuredEmail()) return false;
 
-  const baseUrl = appBaseUrl();
-  const ticketUrl = `${baseUrl}/?order=${encodeURIComponent(registration.id)}`;
-  const checkInUrl = `${baseUrl}/checkin?id=${encodeURIComponent(registration.id)}`;
+  const content = ticketEmailContent(registration);
+
+  if (configuredEmailApi()) {
+    return sendTicketEmailViaApi(registration, content);
+  }
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
@@ -107,38 +201,9 @@ async function sendTicketEmail(registration) {
   await transporter.sendMail({
     from: mailFrom(),
     to: registration.email,
-    subject: `Ve su kien ${registration.planName} - ${registration.id}`,
-    text: [
-      `Xin chao ${registration.fullName},`,
-      "",
-      "Ve su kien cua ban da duoc xac nhan.",
-      `Ma ve: ${registration.id}`,
-      `Hang ve: ${registration.planName}`,
-      `So dien thoai: ${registration.phone}`,
-      "",
-      `Mo QR ve tai: ${ticketUrl}`,
-      `Link check-in cho staff: ${checkInUrl}`,
-      "",
-      "Vui long luu email nay de xuat trinh khi check-in.",
-    ].join("\n"),
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#182230">
-        <h2>Ve su kien da duoc xac nhan</h2>
-        <p>Xin chao <strong>${registration.fullName}</strong>,</p>
-        <p>Ve cua ban da san sang. Vui long luu email nay de mo lai QR khi check-in.</p>
-        <table style="border-collapse:collapse;margin:16px 0">
-          <tr><td style="padding:6px 12px;border:1px solid #ddd">Ma ve</td><td style="padding:6px 12px;border:1px solid #ddd"><strong>${registration.id}</strong></td></tr>
-          <tr><td style="padding:6px 12px;border:1px solid #ddd">Hang ve</td><td style="padding:6px 12px;border:1px solid #ddd">${registration.planName}</td></tr>
-          <tr><td style="padding:6px 12px;border:1px solid #ddd">Dien thoai</td><td style="padding:6px 12px;border:1px solid #ddd">${registration.phone}</td></tr>
-        </table>
-        <p>
-          <a href="${ticketUrl}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 16px;border-radius:8px;font-weight:bold">
-            Mo QR ve
-          </a>
-        </p>
-        <p style="color:#667085;font-size:13px">Neu nut khong mo duoc, copy link nay: ${ticketUrl}</p>
-      </div>
-    `,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
   });
 
   return true;
