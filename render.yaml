@@ -10,6 +10,10 @@ services:
         value: 8080
       - key: PUBLIC_BASE_URL
         sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
       - key: PAYOS_CLIENT_ID
         sync: false
       - key: PAYOS_API_KEY

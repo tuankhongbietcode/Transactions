@@ -24,6 +24,26 @@ https://your-public-url.com/?plan=mastery
 
 ## 3. Environment variables
 
+Admin endpoints are locked with a token:
+
+```env
+ADMIN_TOKEN=replace-with-a-long-random-string
+```
+
+`ADMIN_TOKEN` protects `/api/export/registrations.xlsx`, `POST /api/checkin/:id/confirm`,
+`POST /api/mock/pay/:id` and `POST /api/email/test`. Without it, anyone who knows the URL can
+download the full attendee list or check in someone else's ticket, so always set it in production.
+Leave it empty only for local demos; the server prints a startup warning when it is missing.
+
+Generate a token:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+```
+
+Staff enter this token in the "Mã truy cập nhân sự" field on `/checkin`; it is kept in
+`sessionStorage` for that browser tab only.
+
 For real payOS payment links:
 
 ```env
@@ -39,6 +59,27 @@ The webhook endpoint to configure in payOS is:
 https://your-public-url.com/api/payos/webhook
 ```
 
+The webhook always verifies the payOS HMAC-SHA256 signature. When payOS is not configured the
+endpoint returns `503` instead of accepting unverified payloads.
+
+Optional CORS allowlist, only needed if another origin calls this API:
+
+```env
+CORS_ORIGINS=https://your-landing-page.com
+```
+
+## 3.1 Local test with admin token
+
+```bash
+ADMIN_TOKEN=dev-token npm run start
+```
+
+Then open `/checkin` and enter `dev-token` in the staff access field, or call the API directly:
+
+```bash
+curl -H "Authorization: Bearer dev-token" http://127.0.0.1:8080/api/export/registrations.xlsx -o registrations.xlsx
+```
+
 ## 4. Suggested hosting: Render
 
 For a no-cost public test URL, use Render with the included `Dockerfile` and `render.yaml`.
@@ -49,6 +90,8 @@ For a no-cost public test URL, use Render with the included `Dockerfile` and `re
 
 ```env
 PUBLIC_BASE_URL=https://your-render-service.onrender.com
+ADMIN_TOKEN=...
+CORS_ORIGINS=
 PAYOS_CLIENT_ID=...
 PAYOS_API_KEY=...
 PAYOS_CHECKSUM_KEY=...
@@ -175,6 +218,14 @@ Download it from:
 
 ```text
 https://your-public-url.com/api/export/registrations.xlsx
+```
+
+This endpoint now requires `ADMIN_TOKEN`. Use the "Tải danh sách Excel" button on `/checkin`
+(which sends the token from the staff access field), or pass the header yourself:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://your-public-url.com/api/export/registrations.xlsx -o registrations.xlsx
 ```
 
 ## 8. Production note
