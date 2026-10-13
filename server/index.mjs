@@ -6,6 +6,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import ExcelJS from "exceljs";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
+import helmet from "helmet";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 
@@ -39,8 +41,73 @@ const plans = {
   mastery: { id: "mastery", name: "Mastery", amount: 20000 },
 };
 
-app.use(cors());
+app.set("trust proxy", 1);
+
+app.use(
+  helmet({
+    // The mock checkout page uses inline <style> and <script>, so CSP stays off for now.
+    // Turn it on once payOS is live and the mock route is no longer needed.
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
+const allowedOrigins = String(process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+if (allowedOrigins.length > 0) {
+  app.use(cors({ origin: allowedOrigins }));
+}
+
 app.use(express.json({ limit: "1mb" }));
+
+const registrationLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Quá nhiều yêu cầu đăng ký. Vui lòng thử lại sau một phút." },
+});
+
+const lookupLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 240,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Quá nhiều yêu cầu tra cứu. Vui lòng thử lại sau một phút." },
+});
+
+const adminLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Quá nhiều yêu cầu. Vui lòng thử lại sau một phút." },
+});
+
+const adminToken = String(process.env.ADMIN_TOKEN || "").trim();
+
+function timingSafeEqualString(a, b) {
+  const bufferA = Buffer.from(String(a ?? ""));
+  const bufferB = Buffer.from(String(b ?? ""));
+  if (bufferA.length !== bufferB.length) return false;
+  return crypto.timingSafeEqual(bufferA, bufferB);
+}
+
+function isAdminRequest(req) {
+  if (!adminToken) return true;
+  const header = req.get("authorization") || "";
+  const bearer = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+  const provided = bearer || req.get("x-admin-token") || "";
+  return Boolean(provided) && timingSafeEqualString(provided, adminToken);
+}
+
+function requireAdmin(req, res, next) {
+  if (isAdminRequest(req)) return next();
+  return res.status(401).json({ message: "Cần mã truy cập nhân sự hợp lệ." });
+}
 
 async function ensureStore() {
   await fs.mkdir(dataDir, { recursive: true });
@@ -79,7 +146,7 @@ function toExcelDate(value) {
 function configuredEmail() {
   return Boolean(
     (process.env.EMAIL_API_URL && process.env.EMAIL_API_KEY) ||
-      (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+    (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
   );
 }
 
@@ -143,7 +210,9 @@ function emailApiHeaders() {
     Accept: "application/json",
   };
 
-  headers[headerName] = scheme ? `${scheme} ${process.env.EMAIL_API_KEY}` : process.env.EMAIL_API_KEY;
+  headers[headerName] = scheme
+    ? `${scheme} ${process.env.EMAIL_API_KEY}`
+    : process.env.EMAIL_API_KEY;
   return headers;
 }
 
@@ -311,10 +380,7 @@ async function writeRegistrationsExcel(store) {
   });
 
   const summary = workbook.addWorksheet("Summary");
-  summary.columns = [
-    { width: 28 },
-    { width: 18 },
-  ];
+  summary.columns = [{ width: 28 }, { width: 18 }];
   summary.addRows([
     ["Chỉ số", "Giá trị"],
     ["Tổng đăng ký", rows.length],
@@ -323,11 +389,16 @@ async function writeRegistrationsExcel(store) {
     ["Standard", rows.filter((item) => item.planId === "standard").length],
     ["Mastery", rows.filter((item) => item.planId === "mastery").length],
     ["Free", rows.filter((item) => item.planId === "free").length],
-    ["Doanh thu xác nhận", rows.filter((item) => item.status === "confirmed").reduce((sum, item) => sum + Number(item.amount || 0), 0)],
+    [
+      "Doanh thu xác nhận",
+      rows
+        .filter((item) => item.status === "confirmed")
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    ],
   ]);
   summary.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   summary.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF182230" } };
-  summary.getColumn(2).numFmt = '#,##0';
+  summary.getColumn(2).numFmt = "#,##0";
   summary.getCell("B8").numFmt = '#,##0 "VND"';
 
   await workbook.xlsx.writeFile(excelFile);
@@ -442,7 +513,11 @@ async function saveRegistration(registration) {
 
 async function findRegistrationById(id) {
   if (supabase) {
-    const { data, error } = await supabase.from("registrations").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await supabase
+      .from("registrations")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
     if (error) throw error;
     return fromDbRegistration(data);
   }
@@ -478,9 +553,7 @@ function makeOrderCode() {
 
 function configuredPayOS() {
   return Boolean(
-    process.env.PAYOS_CLIENT_ID &&
-      process.env.PAYOS_API_KEY &&
-      process.env.PAYOS_CHECKSUM_KEY,
+    process.env.PAYOS_CLIENT_ID && process.env.PAYOS_API_KEY && process.env.PAYOS_CHECKSUM_KEY,
   );
 }
 
@@ -663,10 +736,14 @@ function cleanCheckInRegistration(registration) {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, payosConfigured: configuredPayOS(), storage: supabase ? "supabase" : "file" });
+  res.json({
+    ok: true,
+    payosConfigured: configuredPayOS(),
+    storage: supabase ? "supabase" : "file",
+  });
 });
 
-app.get("/api/export/registrations.xlsx", async (_req, res) => {
+app.get("/api/export/registrations.xlsx", requireAdmin, async (_req, res) => {
   try {
     const store = await readAllRegistrations();
     await writeRegistrationsExcel(store);
@@ -677,7 +754,7 @@ app.get("/api/export/registrations.xlsx", async (_req, res) => {
   }
 });
 
-app.post("/api/email/test", async (req, res) => {
+app.post("/api/email/test", adminLimiter, requireAdmin, async (req, res) => {
   try {
     if (!configuredEmail()) {
       return res.status(400).json({ message: "Email is not configured." });
@@ -707,7 +784,7 @@ app.post("/api/email/test", async (req, res) => {
   }
 });
 
-app.post("/api/registrations", async (req, res) => {
+app.post("/api/registrations", registrationLimiter, async (req, res) => {
   try {
     const { planId, fullName, email, phone, company } = req.body;
     const plan = plans[planId];
@@ -759,7 +836,7 @@ app.post("/api/registrations", async (req, res) => {
   }
 });
 
-app.get("/api/registrations/by-order/:orderCode", async (req, res) => {
+app.get("/api/registrations/by-order/:orderCode", lookupLimiter, async (req, res) => {
   try {
     const registration = await findRegistrationByOrderCode(req.params.orderCode);
     if (!registration) return res.status(404).json({ message: "Khong tim thay don." });
@@ -771,14 +848,14 @@ app.get("/api/registrations/by-order/:orderCode", async (req, res) => {
   }
 });
 
-app.get("/api/registrations/:id", async (req, res) => {
+app.get("/api/registrations/:id", lookupLimiter, async (req, res) => {
   const registration = await findRegistrationById(req.params.id);
   if (!registration) return res.status(404).json({ message: "Không tìm thấy đăng ký." });
   const refreshedRegistration = await refreshPaymentStatus(registration);
   res.json({ registration: cleanRegistration(refreshedRegistration) });
 });
 
-app.post("/api/mock/pay/:id", async (req, res) => {
+app.post("/api/mock/pay/:id", requireAdmin, async (req, res) => {
   const registration = await findRegistrationById(req.params.id);
   if (!registration) return res.status(404).json({ message: "Không tìm thấy đăng ký." });
   if (registration.paymentProvider !== "mock") {
@@ -792,7 +869,7 @@ app.post("/api/mock/pay/:id", async (req, res) => {
   res.json({ registration: cleanRegistration(emailedRegistration) });
 });
 
-app.get("/api/checkin/:id", async (req, res) => {
+app.get("/api/checkin/:id", lookupLimiter, async (req, res) => {
   try {
     let registration = await findRegistrationById(req.params.id);
     if (!registration) return res.status(404).json({ message: "Khong tim thay ve." });
@@ -804,10 +881,11 @@ app.get("/api/checkin/:id", async (req, res) => {
   }
 });
 
-app.get("/api/checkin/by-order/:orderCode", async (req, res) => {
+app.get("/api/checkin/by-order/:orderCode", lookupLimiter, async (req, res) => {
   try {
     let registration = await findRegistrationByOrderCode(req.params.orderCode);
-    if (!registration) return res.status(404).json({ message: "Khong tim thay ve theo ma don nay." });
+    if (!registration)
+      return res.status(404).json({ message: "Khong tim thay ve theo ma don nay." });
     registration = await refreshPaymentStatus(registration);
     res.json({ registration: cleanCheckInRegistration(registration) });
   } catch (error) {
@@ -816,7 +894,7 @@ app.get("/api/checkin/by-order/:orderCode", async (req, res) => {
   }
 });
 
-app.post("/api/checkin/:id/confirm", async (req, res) => {
+app.post("/api/checkin/:id/confirm", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const registration = await findRegistrationById(req.params.id);
     if (!registration) return res.status(404).json({ message: "Khong tim thay ve." });
@@ -843,12 +921,16 @@ app.post("/api/checkin/:id/confirm", async (req, res) => {
 
 app.post("/api/payos/webhook", async (req, res) => {
   try {
+    if (!configuredPayOS()) {
+      return res.status(503).json({ message: "payOS chưa được cấu hình." });
+    }
+
     const { code, data, signature, success } = req.body;
     if (!data || !signature) return res.status(400).json({ message: "Webhook thiếu dữ liệu." });
 
-    if (configuredPayOS()) {
-      const expected = createWebhookSignature(data);
-      if (expected !== signature) return res.status(401).json({ message: "Sai chữ ký webhook." });
+    const expected = createWebhookSignature(data);
+    if (!timingSafeEqualString(expected, signature)) {
+      return res.status(401).json({ message: "Sai chữ ký webhook." });
     }
 
     const registration = await findRegistrationByOrderCode(data.orderCode);
@@ -919,4 +1001,16 @@ app.get(/.*/, (_req, res) => {
 
 app.listen(port, () => {
   console.log(`Payment app listening at http://127.0.0.1:${port}`);
+
+  if (!adminToken) {
+    console.warn(
+      "[security] ADMIN_TOKEN chưa được đặt. Các endpoint quản trị (/api/export, /api/checkin/:id/confirm, /api/mock/pay, /api/email/test) đang mở công khai. Hãy đặt ADMIN_TOKEN trước khi public app.",
+    );
+  }
+
+  if (!configuredPayOS()) {
+    console.warn(
+      "[security] payOS chưa được cấu hình. Webhook sẽ bị từ chối và app dùng mock checkout.",
+    );
+  }
 });

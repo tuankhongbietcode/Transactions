@@ -106,6 +106,33 @@ async function parseApiResponse(response: Response) {
   return body;
 }
 
+const STAFF_TOKEN_KEY = "event-staff-token";
+
+function getStaffToken() {
+  try {
+    return window.sessionStorage.getItem(STAFF_TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storeStaffToken(token: string) {
+  try {
+    if (token) {
+      window.sessionStorage.setItem(STAFF_TOKEN_KEY, token);
+    } else {
+      window.sessionStorage.removeItem(STAFF_TOKEN_KEY);
+    }
+  } catch {
+    // sessionStorage can be unavailable in private browsing mode.
+  }
+}
+
+function staffHeaders(): Record<string, string> {
+  const token = getStaffToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function App() {
   const isCheckInPage = window.location.pathname === "/checkin";
   const [selectedPlanId, setSelectedPlanId] = useState<PlanId>("free");
@@ -249,8 +276,8 @@ function App() {
           </div>
           <h1>Đăng ký vé và xuất QR check-in</h1>
           <p>
-            Free xuất QR ngay sau form. Standard và Mastery tạo đơn thanh toán thật qua server,
-            sau khi webhook xác nhận thì QR check-in chuyển sang trạng thái hợp lệ.
+            Free xuất QR ngay sau form. Standard và Mastery tạo đơn thanh toán thật qua server, sau
+            khi webhook xác nhận thì QR check-in chuyển sang trạng thái hợp lệ.
           </p>
           <div className="summary-strip">
             <span>
@@ -370,7 +397,12 @@ function App() {
                 <h3>{registration.planName}</h3>
                 <p className="registration-id">{registration.id}</p>
                 <div className="qr-frame">
-                  <QRCodeSVG value={registration.paymentQr || registration.paymentUrl || ""} size={184} level="M" includeMargin />
+                  <QRCodeSVG
+                    value={registration.paymentQr || registration.paymentUrl || ""}
+                    size={184}
+                    level="M"
+                    includeMargin
+                  />
                 </div>
                 <dl>
                   <div>
@@ -392,7 +424,12 @@ function App() {
                     Mở trang thanh toán
                   </a>
                 )}
-                <button className="ghost-action" type="button" onClick={refreshStatus} disabled={isRefreshing}>
+                <button
+                  className="ghost-action"
+                  type="button"
+                  onClick={refreshStatus}
+                  disabled={isRefreshing}
+                >
                   {isRefreshing ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
                   Kiểm tra trạng thái
                 </button>
@@ -476,6 +513,39 @@ function CheckInApp() {
   const [registration, setRegistration] = useState<CheckInRegistration | null>(null);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [tokenDraft, setTokenDraft] = useState(getStaffToken());
+
+  function saveStaffToken() {
+    const next = tokenDraft.trim();
+    storeStaffToken(next);
+    setTokenDraft(next);
+    setMessage(next ? "Đã lưu mã truy cập cho phiên làm việc này." : "Đã xoá mã truy cập.");
+  }
+
+  async function downloadExport() {
+    setIsLoading(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/export/registrations.xlsx", { headers: staffHeaders() });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || "Không thể tải file Excel.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "event-registrations.xlsx";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Không thể tải file Excel.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (initialId) {
@@ -498,7 +568,7 @@ function CheckInApp() {
         lookup.type === "orderCode"
           ? `/api/checkin/by-order/${encodeURIComponent(lookup.value)}`
           : `/api/checkin/${encodeURIComponent(lookup.value)}`;
-      const body = await parseApiResponse(await fetch(endpoint));
+      const body = await parseApiResponse(await fetch(endpoint, { headers: staffHeaders() }));
       setRegistration(body.registration);
       setTicketCode(body.registration.id);
     } catch (error) {
@@ -518,6 +588,7 @@ function CheckInApp() {
       const body = await parseApiResponse(
         await fetch(`/api/checkin/${encodeURIComponent(registration.id)}/confirm`, {
           method: "POST",
+          headers: staffHeaders(),
         }),
       );
       setRegistration(body.registration);
@@ -547,6 +618,17 @@ function CheckInApp() {
         <section className="checkin-grid">
           <div className="staff-panel">
             <label>
+              Mã truy cập nhân sự
+              <input
+                type="password"
+                value={tokenDraft}
+                onChange={(event) => setTokenDraft(event.target.value)}
+                onBlur={saveStaffToken}
+                placeholder="ADMIN_TOKEN"
+                autoComplete="off"
+              />
+            </label>
+            <label>
               Mã vé / nội dung QR
               <textarea
                 value={ticketCode}
@@ -554,14 +636,24 @@ function CheckInApp() {
                 placeholder="EVT-STA-624505-E62EA9 hoặc dán nội dung QR"
               />
             </label>
-            <button className="primary-action" type="button" onClick={() => lookupTicket()} disabled={isLoading}>
+            <button
+              className="primary-action"
+              type="button"
+              onClick={() => lookupTicket()}
+              disabled={isLoading}
+            >
               {isLoading ? <Loader2 className="spin" size={18} /> : <QrCode size={18} />}
               Kiểm tra vé
             </button>
-            <a className="ghost-action export-link" href="/api/export/registrations.xlsx">
+            <button
+              className="ghost-action export-link"
+              type="button"
+              onClick={downloadExport}
+              disabled={isLoading}
+            >
               <Sheet size={16} />
               Tải danh sách Excel
-            </a>
+            </button>
             {message && <div className="notice compact">{message}</div>}
           </div>
 
@@ -577,10 +669,16 @@ function CheckInApp() {
               <div className={`ticket-panel ${registration.checkedInAt ? "checked-in" : ""}`}>
                 <div
                   className={`status-pill ${
-                    registration.status === "confirmed" && !registration.checkedInAt ? "" : "pending"
+                    registration.status === "confirmed" && !registration.checkedInAt
+                      ? ""
+                      : "pending"
                   }`}
                 >
-                  {registration.checkedInAt ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
+                  {registration.checkedInAt ? (
+                    <CheckCircle2 size={16} />
+                  ) : (
+                    <ShieldCheck size={16} />
+                  )}
                   {registration.checkedInAt
                     ? "Đã check-in"
                     : registration.status === "confirmed"
@@ -608,10 +706,19 @@ function CheckInApp() {
                   </div>
                   <div>
                     <dt>Check-in</dt>
-                    <dd>{registration.checkedInAt ? new Date(registration.checkedInAt).toLocaleString("vi-VN") : "Chưa"}</dd>
+                    <dd>
+                      {registration.checkedInAt
+                        ? new Date(registration.checkedInAt).toLocaleString("vi-VN")
+                        : "Chưa"}
+                    </dd>
                   </div>
                 </dl>
-                <button className="secondary-action" type="button" onClick={confirmCheckIn} disabled={!canCheckIn || isLoading}>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={confirmCheckIn}
+                  disabled={!canCheckIn || isLoading}
+                >
                   {isLoading ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />}
                   Xác nhận cho vào
                 </button>
