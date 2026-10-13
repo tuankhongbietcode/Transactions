@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Câu hỏi về deploy
+    url: https://github.com/tuankhongbietcode/Transactions/blob/main/DEPLOY.md
+    about: Hướng dẫn chạy local, cấu hình payOS, Supabase và deploy lên Render.

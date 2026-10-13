@@ -1,0 +1,70 @@
+name: Báo lỗi
+description: Báo một lỗi gặp phải khi chạy hoặc deploy app
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cảm ơn bạn đã báo lỗi. Điền càng cụ thể càng dễ tìm ra nguyên nhân.
+        Nếu lỗi liên quan tới dữ liệu khách hàng, hãy che bớt email và số điện thoại.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Chuyện gì đã xảy ra?
+      description: Mô tả hành vi thực tế và hành vi bạn mong đợi.
+      placeholder: Khi bấm "Tạo đơn thanh toán" với gói Standard thì ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Các bước tái hiện
+      placeholder: |
+        1. Mở /?plan=standard
+        2. Điền form và bấm gửi
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Khu vực gặp lỗi
+      options:
+        - Đăng ký / form
+        - Thanh toán payOS
+        - Webhook xác nhận thanh toán
+        - QR vé / check-in
+        - Excel export
+        - Email vé
+        - Deploy / hạ tầng
+        - Khác
+    validations:
+      required: true
+
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Đang dùng lưu trữ nào?
+      options:
+        - Supabase
+        - File JSON local (data/registrations.json)
+        - Không rõ
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Phiên bản Node
+      placeholder: "22.11.0"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log / thông báo lỗi
+      description: Dán log server hoặc lỗi trên console trình duyệt.
+      render: shell

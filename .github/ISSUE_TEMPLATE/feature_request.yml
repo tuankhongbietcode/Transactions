@@ -1,0 +1,43 @@
+name: Đề xuất tính năng
+description: Gợi ý một tính năng hoặc cải tiến cho app
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Vấn đề đang gặp
+      description: Tính năng này giải quyết việc gì?
+      placeholder: Hiện tại ban tổ chức phải mở Excel để đối soát doanh thu, mất thời gian vì ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Đề xuất
+      description: Bạn muốn app làm gì?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Cách khác đã cân nhắc
+      description: Không bắt buộc.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Khu vực liên quan
+      options:
+        - Đăng ký / form
+        - Thanh toán payOS
+        - Webhook xác nhận thanh toán
+        - QR vé / check-in
+        - Excel export
+        - Email vé
+        - Deploy / hạ tầng
+        - Khác
+    validations:
+      required: true
