@@ -17,7 +17,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
-const dataDir = path.join(rootDir, "data");
+const dataDir = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(rootDir, "data");
 const dataFile = path.join(dataDir, "registrations.json");
 const excelFile = path.join(dataDir, "registrations.xlsx");
 

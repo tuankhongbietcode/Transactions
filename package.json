@@ -11,6 +11,7 @@
     "server": "node server/index.mjs",
     "migrate:supabase": "node server/migrate-local-to-supabase.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"server/**/*.test.mjs\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

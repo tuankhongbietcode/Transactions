@@ -121,6 +121,7 @@ DEPLOY.md                 hướng dẫn deploy chi tiết
 | `npm run build`            | Build frontend vào `dist/`             |
 | `npm run start`            | Chạy server production                 |
 | `npm run typecheck`        | Kiểm tra TypeScript                    |
+| `npm run test`             | Chạy smoke test API (`node:test`)      |
 | `npm run lint`             | Chạy ESLint                            |
 | `npm run format`           | Định dạng bằng Prettier                |
 | `npm run migrate:supabase` | Chuyển dữ liệu JSON local lên Supabase |
