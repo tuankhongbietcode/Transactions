@@ -6,6 +6,21 @@ Khách chọn hạng vé → điền thông tin → nhận QR. Vé miễn phí x
 payOS và chỉ chuyển sang trạng thái hợp lệ sau khi webhook xác nhận thanh toán. Nhân sự tại
 sự kiện quét QR (hoặc nhập mã vé) để check-in, và tải được file Excel đối soát.
 
+## Giao diện
+
+**Đăng ký vé và nhận QR check-in** — chọn hạng vé, điền thông tin; vé miễn phí xuất QR ngay, vé
+trả phí chờ webhook xác nhận.
+
+![Trang đăng ký và vé QR](docs/screenshots/01-registration-and-ticket.png)
+
+**Check-in tại cổng** — nhân sự quét QR hoặc nhập mã vé để xem thông tin khách và xác nhận cho vào.
+
+![Trang check-in cho nhân sự](docs/screenshots/02-checkin.png)
+
+**Thanh toán** — chế độ mock checkout cho phép test toàn bộ luồng khi chưa cấu hình payOS.
+
+![Trang thanh toán mock](docs/screenshots/03-mock-checkout.png)
+
 ## Tính năng
 
 | Nhóm       | Chi tiết                                                                              |
@@ -13,7 +28,7 @@ sự kiện quét QR (hoặc nhập mã vé) để check-in, và tải được 
 | Đăng ký    | 3 hạng vé cấu hình sẵn (`free`, `standard`, `mastery`), validate họ tên / email / SĐT |
 | Thanh toán | payOS payment link + QR, chế độ mock checkout khi chưa cấu hình payOS                 |
 | Xác nhận   | Webhook payOS có kiểm tra chữ ký HMAC-SHA256, kèm API đối soát trạng thái             |
-| Vé         | QR check-in theo mã đơn, mở lại vé bằng link `/?order=<mã vé>`                        |
+| Vé         | QR check-in theo mã đơn, mở lại vé bằng link `/?order=<mã đăng ký>` hoặc `/?orderCode=<mã đơn>` |
 | Check-in   | Trang `/checkin` cho nhân sự: quét QR hoặc nhập mã, chặn check-in trùng               |
 | Đối soát   | Xuất Excel tự động cập nhật (`/api/export/registrations.xlsx`)                        |
 | Email      | Gửi email vé qua HTTP email API hoặc SMTP (tuỳ chọn, tắt được)                        |
