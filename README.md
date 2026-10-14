@@ -23,16 +23,16 @@ trả phí chờ webhook xác nhận.
 
 ## Tính năng
 
-| Nhóm       | Chi tiết                                                                              |
-| ---------- | ------------------------------------------------------------------------------------- |
-| Đăng ký    | 3 hạng vé cấu hình sẵn (`free`, `standard`, `mastery`), validate họ tên / email / SĐT |
-| Thanh toán | payOS payment link + QR, chế độ mock checkout khi chưa cấu hình payOS                 |
-| Xác nhận   | Webhook payOS có kiểm tra chữ ký HMAC-SHA256, kèm API đối soát trạng thái             |
+| Nhóm       | Chi tiết                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| Đăng ký    | 3 hạng vé cấu hình sẵn (`free`, `standard`, `mastery`), validate họ tên / email / SĐT           |
+| Thanh toán | payOS payment link + QR, chế độ mock checkout khi chưa cấu hình payOS                           |
+| Xác nhận   | Webhook payOS có kiểm tra chữ ký HMAC-SHA256, kèm API đối soát trạng thái                       |
 | Vé         | QR check-in theo mã đơn, mở lại vé bằng link `/?order=<mã đăng ký>` hoặc `/?orderCode=<mã đơn>` |
-| Check-in   | Trang `/checkin` cho nhân sự: quét QR hoặc nhập mã, chặn check-in trùng               |
-| Đối soát   | Xuất Excel tự động cập nhật (`/api/export/registrations.xlsx`)                        |
-| Email      | Gửi email vé qua HTTP email API hoặc SMTP (tuỳ chọn, tắt được)                        |
-| Lưu trữ    | Supabase (khuyến nghị) hoặc file JSON `data/registrations.json` khi chạy local        |
+| Check-in   | Trang `/checkin` cho nhân sự: quét QR hoặc nhập mã, chặn check-in trùng                         |
+| Đối soát   | Xuất Excel tự động cập nhật (`/api/export/registrations.xlsx`)                                  |
+| Email      | Gửi email vé qua HTTP email API hoặc SMTP (tuỳ chọn, tắt được)                                  |
+| Lưu trữ    | Supabase (khuyến nghị) hoặc file JSON `data/registrations.json` khi chạy local                  |
 
 ## Kiến trúc
 
